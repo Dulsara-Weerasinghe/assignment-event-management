@@ -18,4 +18,6 @@ public interface EventRepository extends CrudRepository<Event, String> {
 
     @Query("SELECT e FROM Event e WHERE e.startTime >= :now")
    Page<Event> findUpcomingEvents(@Param("now") LocalDateTime now, Pageable pageable);
+
+    List<Event> findByHostId(String userId);
 }

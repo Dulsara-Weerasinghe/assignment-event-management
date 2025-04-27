@@ -35,6 +35,12 @@ public class User {
   @Column(name = "updated_at")
   private LocalDateTime updatedAt;
 
+  @Column(name = "Password")
+  private String password;
+
+  @Column(name = "userName")
+  private String userName;
+
   @PrePersist
   protected void onCreate() {
     createdAt = LocalDateTime.now();

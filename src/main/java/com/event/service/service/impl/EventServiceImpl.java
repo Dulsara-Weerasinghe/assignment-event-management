@@ -1,17 +1,18 @@
 package com.event.service.service.impl;
 
 import com.event.service.domain.Event;
-import com.event.service.dto.CreateEventRequest;
-import com.event.service.dto.FilterEvents;
-import com.event.service.dto.UpcomingEventsRequest;
-import com.event.service.dto.UpdateEvent;
+import com.event.service.dto.*;
 import com.event.service.enums.EventVisibilityType;
 import com.event.service.exception.ApplicationException;
 import com.event.service.exception.DataNotFounException;
+import com.event.service.exception.ResourceNotFoundException;
+import com.event.service.repository.AttendenceRepository;
 import com.event.service.repository.EventRepository;
 import com.event.service.service.EventService;
 import com.event.service.util.ErrorDsc;
 import com.event.service.util.EventUtil;
+import com.event.service.util.varList.MessageVarList;
+import com.event.service.util.varList.StatusVarList;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -24,6 +25,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @Slf4j
@@ -31,8 +33,11 @@ public class EventServiceImpl implements EventService {
 
     private final EventRepository eventRepository;
 
-    public EventServiceImpl(EventRepository eventRepository) {
+    private final AttendenceRepository attendenceRepository;
+
+    public EventServiceImpl(EventRepository eventRepository, AttendenceRepository attendenceRepository) {
         this.eventRepository = eventRepository;
+        this.attendenceRepository = attendenceRepository;
     }
 
     @Override
@@ -61,7 +66,7 @@ public class EventServiceImpl implements EventService {
     }
 
     @Override
-    public ResponseEntity<?> updateTask(UpdateEvent updateEvent, String eventId) throws DataNotFounException {
+    public ResponseBean updateTask(UpdateEvent updateEvent, String eventId) throws DataNotFounException {
         log.debug("Event update request" + updateEvent);
 
         Event task = eventRepository.findById(eventId).orElseThrow(() -> new DataNotFounException(ErrorDsc.ERR_DSC_TASK_NOT_FOUND));
@@ -73,30 +78,30 @@ public class EventServiceImpl implements EventService {
         Event save = eventRepository.save(task);
 
 
-        return new ResponseEntity<>(save, HttpStatus.OK);
+        return new ResponseBean(MessageVarList.RSP_SUCCESS, StatusVarList.SUCCESS,save.getId());
     }
 
     @Override
-    public ResponseEntity<?> deleteEvent(String eventId) {
+    public ResponseBean deleteEvent(String eventId) {
         eventRepository.deleteById(eventId);
 
-        return new ResponseEntity<>(eventId, HttpStatus.OK);
+        return new ResponseBean(MessageVarList.RSP_SUCCESS,StatusVarList.SUCCESSFULLY_DELETED,eventId);
     }
 
     @Override
-    public List<Event> filterEvents(FilterEvents filterEvents) {
+    public ResponseBean filterEvents(FilterEvents filterEvents) {
 
         List<Event> eventList = eventRepository.getList(filterEvents.getDate(), filterEvents.getLocation(), filterEvents.getVisibility());
         if (!eventList.isEmpty()) {
-            return eventList;
+            return new ResponseBean(MessageVarList.RSP_SUCCESS,StatusVarList.SUCCESS,eventList);
         } else {
-            return new ArrayList<>();
+            return new ResponseBean(MessageVarList.RSP_NO_DATA_FOUND,StatusVarList.FAILED,null);
         }
 
     }
 
     @Override
-    public List<Event> upcomingEvents(UpcomingEventsRequest upcomingEventsRequest) {
+    public ResponseBean upcomingEvents(UpcomingEventsRequest upcomingEventsRequest) {
         Pageable pageable = PageRequest.of(upcomingEventsRequest.getPage(), upcomingEventsRequest.getSize(), Sort.by("startTime").ascending());
         Page<Event> eventPage = eventRepository.findUpcomingEvents(LocalDateTime.now(), pageable);
         List<Event> eventList = new ArrayList<>();
@@ -114,10 +119,76 @@ public class EventServiceImpl implements EventService {
                 eventList.add(event1);
             }
 
-            return eventList;
+            return new ResponseBean(MessageVarList.RSP_SUCCESS,StatusVarList.SUCCESS,eventList);
         } else {
-            return eventList;
+            return new ResponseBean(MessageVarList.RSP_NO_DATA_FOUND,StatusVarList.FAILED,null);
         }
+    }
+
+    @Override
+    public String checkEventId(String eventId) throws ResourceNotFoundException {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+
+        LocalDateTime now = LocalDateTime.now();
+
+        if (now.isBefore(event.getStartTime())) {
+            return "UPCOMING";
+        } else if (now.isAfter(event.getEndTime())) {
+            return "COMPLETED";
+        } else {
+            return "ONGOING";
+        }
+
+    }
+
+    @Override
+    public Map<String, List<EventDto>> getUserHostedAndAttendingEvents(String userId) {
+        List<EventDto> hostedEvents = convertEventsToDtos(eventRepository.findByHostId(userId));
+        List<EventDto> attendingEvents = convertEventsToDtos(attendenceRepository.findEventsByUserId(userId));
+
+        return Map.of(
+                "hosting", hostedEvents,
+                "attending", attendingEvents
+        );
+
+    }
+
+    @Override
+    public EventDetailsResponse getEventDetails(String id) throws ResourceNotFoundException {
+
+
+        Event event = eventRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+
+        long attendeeCount = attendenceRepository.countAttendeesByEventId(id);
+
+        return new EventDetailsResponse(
+                event.getId(),
+                event.getTitle(),
+                event.getDescription(),
+                event.getStartTime(),
+                event.getEndTime(),
+                event.getLocation(),
+                EventVisibilityType.valueOf(event.getVisibility().name()),
+                attendeeCount
+        );
+
+
+    }
+
+    private List<EventDto> convertEventsToDtos(List<Event> events) {
+        return events.stream()
+                .map(event -> new EventDto(
+                        event.getId(),
+                        event.getTitle(),
+                        event.getDescription(),
+                        event.getStartTime(),
+                        event.getEndTime(),
+                        event.getLocation(),
+                        event.getVisibility()
+                ))
+                .toList();
     }
 
 

@@ -42,24 +42,38 @@ public class SecurityConfig {
 //        return new InMemoryUserDetailsManager(admin, user);
         return new UserInfoService();
     }
+//    @Bean
+//    public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
+//        return httpSecurity.csrf().disable()
+//                .authorizeHttpRequests()
+//                .requestMatchers(HttpMethod.POST,"/api/v1/**").permitAll()
+//                .and()
+//                .authorizeHttpRequests()
+//                .requestMatchers(HttpMethod.PATCH, "/api/v1/**")
+//                .authenticated()
+//                .requestMatchers(HttpMethod.GET, "/api/v1/**")
+//                .authenticated()
+//                .requestMatchers(HttpMethod.DELETE, "/api/v1/**")
+//                .authenticated()
+//                .and()
+//                .sessionManagement()
+//                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+//                .and()
+//                .authenticationProvider(authenticationProvider())
+//                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+//                .build();
+//    }
+
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
-        return httpSecurity.csrf().disable()
-                .authorizeHttpRequests()
-                .requestMatchers(HttpMethod.POST).permitAll()
-                .and()
-                .authorizeHttpRequests()
-                .requestMatchers(HttpMethod.PATCH, "/api/v1/**")
-                .authenticated()
-                .requestMatchers(HttpMethod.GET, "/api/v1/**")
-                .authenticated()
-                .and()
-                .sessionManagement()
-                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                .and()
-                .authenticationProvider(authenticationProvider())
-                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
-                .build();
+        httpSecurity.csrf(csrf -> csrf.disable())
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/auth/authenticate").permitAll()
+                        .anyRequest().authenticated()
+                )
+                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
+        return httpSecurity.build();
     }
 
     @Bean
